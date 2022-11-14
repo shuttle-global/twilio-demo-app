@@ -14,7 +14,7 @@ function app_path (context, path) {
 }
 
 const shuttle_api = {
-    host: process.env.TWILIO_API_URL || 'https://app.shuttleglobal.com',
+    host: process.env.TWILIO_API_URL || 'https://twilio.shuttleglobal.com',
 
     // Wrap fetch with logging
     _logged_fetch: (context, url, options) => {
@@ -157,8 +157,8 @@ function mount (app) {
                 <link rel="icon" href="/favicon.png">
               </head>
               <body>
-                <div data-shuttle-checkout="${req.params.link}" data-shuttle-disable-new-window="true" data-shuttle-host="https://dev.shuttleglobal.com"></div>
-                <script src="https://dev.shuttleglobal.com/shuttle-1.3.X.js" type="text/javascript"></script>
+                <div data-shuttle-checkout="${req.params.link}" data-shuttle-disable-new-window="true" data-shuttle-host="https://app.shuttleglobal.com"></div>
+                <script src="https://app.shuttleglobal.com/shuttle-1.3.X.js" type="text/javascript"></script>
               </body>
             </html>`);
     })
@@ -231,7 +231,7 @@ function mount (app) {
 
     async function build_main_menu(context, choices_so_far = []) {
         const capabilities = await context.capabilities_promise;
-        const payment_methods = await context.payment_methods_promise;
+        const payment_methods = await context.payment_methods_promise || [];
 
         let menu = [
             {
@@ -381,12 +381,8 @@ function mount (app) {
 
         menu = trimmed_menu(menu);
 
-        try {
-            choices_so_far?.map((c) => { menu = menu[c].sub_menu});
-        } catch(e) {
-            twiml.say("Sorry, something went wrong"); 
-            menu = await build_main_menu(req.c)
-        }
+        // Invalid choice will throw an exception
+        choices_so_far?.map((c) => { menu = menu[c].sub_menu});
 
         return menu;
     }
@@ -395,7 +391,18 @@ function mount (app) {
     	const twiml = new VoiceResponse();
 
         var choices_so_far = req.query.choice ? req.query.choice.split(",") : [];
-        var menu = await build_main_menu(req.c, choices_so_far);
+        var menu;
+
+        try {
+            menu = await build_main_menu(req.c, choices_so_far);
+            if (menu.length == 0) {
+                throw "Invalid URL";
+            }
+        } catch(err) {
+            twiml.say("Sorry, something went wrong."); 
+            menu = await build_main_menu(req.c);   
+            choices_so_far = [];      
+        }
         
         const selection = req.body.Digits;
 
@@ -519,7 +526,6 @@ function mount (app) {
 
         var response = await shuttle_api.create_checkout(req.c, {
             options: {
-                host: "https://dev.shuttleglobal.com",
                 instance_key: req.c.instance_id,
                 action: req.query.action,
                 alt_key: link_id,
