@@ -122,7 +122,7 @@ const shuttle_api = {
 
     send_sms: (context, from, to, message) => {
         let form = new FormData();
-        form.append('From', config.TWILIO_SMS_FROM);
+        form.append('From', from);
         form.append('To', to);
         form.append('Body', message);
 
@@ -539,7 +539,7 @@ function mount (app) {
             }
         });
 
-        await shuttle_api.send_sms(req.c, req.body.Called, req.body.Caller, `Please complete your payment here: ${shuttle_api.host}/demo/link/${response.nonce}`);
+        await shuttle_api.send_sms(req.c, config.TWILIO_SMS_FROM || req.body.Called, req.body.Caller, `Please complete your payment here: ${shuttle_api.host}/demo/link/${response.nonce}`);
         
         twiml.say(`We've sent you a link to ${req.query.action == "AUTH" ? "authorize" : "pay"} 1 USD, please follow the link to complete payment.`);
         twiml.redirect(app_path(req.c, `/payment_link/${link_id}/wait`));
