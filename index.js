@@ -539,7 +539,7 @@ function mount (app) {
             }
         });
 
-        await shuttle_api.send_sms(req.c, req.body.Called, req.body.Caller, `Please complete your payment here: https://twilio.shuttlestaging.com/demo/link/${response.nonce}`);
+        await shuttle_api.send_sms(req.c, req.body.Called, req.body.Caller, `Please complete your payment here: ${shuttle_api.host}/demo/link/${response.nonce}`);
         
         twiml.say(`We've sent you a link to ${req.query.action == "AUTH" ? "authorize" : "pay"} 1 USD, please follow the link to complete payment.`);
         twiml.redirect(app_path(req.c, `/payment_link/${link_id}/wait`));
