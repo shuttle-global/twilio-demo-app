@@ -1,6 +1,6 @@
 # Shuttle Twilio Demo App
 
-This is a simple demo app to showcase payments in Twilio, it is not intended to be the blueprint for an actual app, but rather just a working demo. You will probably get the most value out of just reviewing the source code, but you can run it if you wich.
+This is a simple demo app to showcase payments in Twilio, it is not intended to be the blueprint for an actual app, but rather just a working demo. You will probably get the most value out of just reviewing the source code, but you can run it if you wish.
 
 ## To use
 
@@ -29,7 +29,7 @@ ngrok config add-authtoken /* auth token */
 ngrok http 3000
 ```
 
-And set your Twilio phone number webhook endpoint to the demo app URL supplied on twilio.shuttleglobal.com, replacing `twilio.shuttleglobal.com` with the `ngrok.url`.
+And set your Twilio phone number webhook endpoint to the demo app URL supplied on twilio.shuttleglobal.com, replacing `twilio.shuttleglobal.com` with the `your.ngrok.url`.
 
 
 ## Functionality
@@ -77,7 +77,7 @@ We've tried to keep the code very simple to aid legibility.
 	- `delete_payment_method`: Delete a saved token
 	- `send_sms`: Twilio wrapper to send a payment link
 
-* Express "middleware" (the `app.use`) extracts key data
+* Express "middleware" (the `app.use`) extracts key data from each request:
 
 	- `connector`: The Twilio Pay Connector ID
 	- `instance_id`: Shuttle account `username` 
@@ -89,20 +89,20 @@ We've tried to keep the code very simple to aid legibility.
 
 * `.../start`: The app entry point, if the user configured a GET in Twilio we redirect to a POST, so that we can see the caller's phone number and lookup if there are any saved cards. This uses:
 
-	- `instance` API to say the merchant and if its a sandbox account
-	- `capabilities` API to confirm you've configured the account and its ready for payment.
+	- `instance` to get the merchant name and if its a sandbox account
+	- `capabilities` to confirm you've configured the account and its ready for payment.
 
 * `.../main_menu`: A menu to allow the user to select a test case, see the `build_main_menu` function and specifically the `enabled` fields which showcases how to know if a feature is available. This uses:
 
 	- `capabilities` API to see which specific functions are available
 	- `get_payment_methods` API to see if there are any cards stored on the account
 
-* `.../new_payment`: This function creates the TwiML for all the user cases (paymnentm, authorisation, tokenisation, card, ACH) 
+* `.../new_payment`: This function creates the TwiML for all `<Pay>` verb use cases (payment, authorisation, tokenisation, card, ACH) 
 * `.../payment_response`: This function gets the callback from the Pay Connector, inspects the response and decides the next step
 * `.../repeat_payment`: This function performs a payment on a saved token using the Shuttle API.
 * `.../payment_link`: This function creates a "checkout" and sends an SMS to the customer to complete payment online
 * `.../payment_link/:link/wait`: This function waits for a payment link to complete
-* `.../payment/:id`: This function gets the payment, and inspects the status to determine the next step (Success -> Payment Menu, Pending -> Main Menu, Decline -> Main Menu)
+* `.../payment/:id`: This function gets the payment, and inspects the status to determine the next step (Success -> Payment Menu, In Progress -> Main Menu, Decline -> Main Menu)
 * `.../payment/:id/payment_menu`: This function presents options for subsequent actions on a payment (refund, capture, void). This uses:
 
 	- `capabilities` API to determine what is supported
@@ -114,11 +114,11 @@ We've tried to keep the code very simple to aid legibility.
 	- `capture_payment` to instruct a capture, this then goes back to the menu to allow refund
 	- `void_payment` to instruct a void
 
-* `.../payment_method/:id`: This function advises the tokenisation was successful and returns to main menu. This uses:
+* `.../payment_method/:id`: This function advises if tokenisation was successful and returns to main menu. This uses:
 
 	- `payment_method` 
 
-* `.../payment_method/:id/delete`: This function deleted a tokenisation. This uses:
+* `.../payment_method/:id/delete`: This function deletes a token. This uses:
 
 	- `delete_payment_method` 
 
