@@ -2,6 +2,9 @@
 
 This is a simple demo app to showcase payments in Twilio, it is not intended to be the blueprint for an actual app, but rather just a working demo. You will probably get the most value out of just reviewing the source code, but you can run it if you wish.
 
+
+Prefer to watch a video? [click here](https://www.loom.com/share/5c1f10aa3d5a4e6fa933b4e3675533d2)
+
 ## To use
 
 Set the following environment variables if you want to use payment links:
