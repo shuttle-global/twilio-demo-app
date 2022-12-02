@@ -545,7 +545,7 @@ function mount (app) {
             }
         });
 
-        await shuttle_api.send_sms(req.c, config.TWILIO_SMS_FROM || req.body.Called, req.body.Caller, `Please complete your payment here: ${shuttle_api.host}/demo/link/${response.nonce}`);
+        await shuttle_api.send_sms(req.c, config.TWILIO_SMS_FROM || req.body.Called, req.body.Caller, `Please complete your payment here: ${shuttle_api.host}/demo/${req.c.instance_id}/link/${response.nonce}`);
         
         twiml.say(`We've sent you a link to ${req.query.action == "AUTH" ? "authorize" : "pay"} 1 USD, please follow the link to complete payment.`);
         twiml.redirect(app_path(req.c, `/payment_link/${link_id}/wait`));
