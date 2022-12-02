@@ -1,6 +1,6 @@
 {
   "name": "@shuttleglobal/twilio-demo-app",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Shuttle - Twilio Demo App",
   "repository": "https://github.com/shuttle-global/twilio-demo-app",
   "license": "MIT",

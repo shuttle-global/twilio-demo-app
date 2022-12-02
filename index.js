@@ -4,9 +4,15 @@ const FormData = require('form-data');
 const VoiceResponse = require('twilio').twiml.VoiceResponse;
 
 const config = {
+    SANDBOX_SHARED_KEY: "1186_681287",
+    LIVE_SHARED_KEY: "1186_681286",
     TWILIO_SID: process.env.TWILIO_SID,
     TWILIO_TOKEN: process.env.TWILIO_TOKEN,
     TWILIO_SMS_FROM: process.env.TWILIO_SMS_FROM
+}
+
+function twilio_public_key(instance) {
+    return instance.startsWith("T_") ? config.SANDBOX_SHARED_KEY : config.LIVE_SHARED_KEY;
 }
 
 function app_path (context, path) {
@@ -145,7 +151,7 @@ function mount (app) {
         }
     };
 
-    app.get('/demo/link/:link', (req, res) => {
+    app.get('/demo/link/:instance_id/:link', (req, res) => {
         res.status(200).send(
             `<!DOCTYPE html>
             <html class="h-full">
@@ -158,7 +164,7 @@ function mount (app) {
               </head>
               <body>
                 <div data-shuttle-checkout="${req.params.link}" data-shuttle-disable-new-window="true" data-shuttle-host="https://app.shuttleglobal.com"></div>
-                <script src="https://app.shuttleglobal.com/shuttle-1.3.X.js" type="text/javascript"></script>
+                <script src="https://app.shuttleglobal.com/${twilio_public_key(req.params.instance_id)}/${req.params.instance_id}/shuttle-1.3.X.js" type="text/javascript"></script>
               </body>
             </html>`);
     })
