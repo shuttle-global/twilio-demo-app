@@ -455,7 +455,7 @@ function mount (app) {
             postalCode: req.body.FromCountry === "US",
             paymentMethod: req.query.type == "ACH" ? 'ach-debit' : undefined,
             bankAccountType: req.query.account_type,
-            action: app_path(req.c, `/payment_response`),
+            action: `${shuttle_api.host}${app_path(req.c, `/payment_response`)}`,
             description: `Demo App - ${req.query.type} ${req.query.action || "payment"}`
         });
 
