@@ -4,7 +4,7 @@ const FormData = require('form-data');
 const VoiceResponse = require('twilio').twiml.VoiceResponse;
 
 const config = {
-    API_URL: process.env.SHUTTLE_API_URL || 'https://api.shuttleglobal.com',
+    API_URL: process.env.SHUTTLE_API_URL || 'https://app.shuttleglobal.com',
     SANDBOX_SHARED_KEY: process.env.TWILIO_SHARED_KEY_SANDBOX,
     LIVE_SHARED_KEY: process.env.TWILIO_SHARED_KEY_LIVE,
     TWILIO_SID: process.env.TWILIO_SID,
@@ -47,7 +47,7 @@ const shuttle_api = {
         return shuttle_api._logged_fetch(context, `${shuttle_api.host}${path}`, {
             headers: {
                 ...options?.headers,
-                "Authorization": `Basic ${Buffer.from(`${context.instance_id}:${context.instance_secret}`).toString('base64')}`,
+                "Authorization": `Basic ${Buffer.from(`${context.instance_secret}:`).toString('base64')}`,
                 "Content-Type": options?.json ? "application/json" : (options?.headers || {})["Content-Type"]
             },
             body: options?.json ? JSON.stringify(options?.json) : options?.body,
