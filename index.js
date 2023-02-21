@@ -4,7 +4,7 @@ const FormData = require('form-data');
 const VoiceResponse = require('twilio').twiml.VoiceResponse;
 
 const config = {
-    API_URL: process.env.SHUTTLE_API_URL || 'https://api.shuttleglobal.com'
+    API_URL: process.env.SHUTTLE_API_URL || 'https://api.shuttleglobal.com',
     SANDBOX_SHARED_KEY: process.env.TWILIO_SHARED_KEY_SANDBOX,
     LIVE_SHARED_KEY: process.env.TWILIO_SHARED_KEY_LIVE,
     TWILIO_SID: process.env.TWILIO_SID,
@@ -66,7 +66,6 @@ const shuttle_api = {
     },
 
     get_payment_methods: (context, crm_key) => {
-        // return crm_key ? shuttle_api.fetch(context, `/c/api/instances/${context.instance_id}/payment_methods?criteria=${escape(`account=${acc_20648_10016 || crm_key}`)}`)
         return crm_key ? shuttle_api.fetch(context, `/c/api/instances/${context.instance_id}/accounts/${crm_key}/payment_methods?criteria=${escape(`status=ACTIVE;FAILING`)}`)
             .then((response) => response?.payment_methods) : undefined;
     },  
