@@ -4,8 +4,9 @@ const FormData = require('form-data');
 const VoiceResponse = require('twilio').twiml.VoiceResponse;
 
 const config = {
-    SANDBOX_SHARED_KEY: "1186_681287",
-    LIVE_SHARED_KEY: "1186_681286",
+    API_URL: process.env.SHUTTLE_API_URL || 'https://api.shuttleglobal.com'
+    SANDBOX_SHARED_KEY: process.env.TWILIO_SHARED_KEY_SANDBOX,
+    LIVE_SHARED_KEY: process.env.TWILIO_SHARED_KEY_LIVE,
     TWILIO_SID: process.env.TWILIO_SID,
     TWILIO_TOKEN: process.env.TWILIO_TOKEN,
     TWILIO_SMS_FROM: process.env.TWILIO_SMS_FROM
@@ -20,7 +21,7 @@ function app_path (context, path) {
 }
 
 const shuttle_api = {
-    host: process.env.TWILIO_API_URL || 'https://twilio.shuttleglobal.com',
+    host: config.API_URL,
 
     // Wrap fetch with logging
     _logged_fetch: (context, url, options) => {
@@ -46,7 +47,7 @@ const shuttle_api = {
         return shuttle_api._logged_fetch(context, `${shuttle_api.host}${path}`, {
             headers: {
                 ...options?.headers,
-                "Authorization": "Bearer " + context.instance_secret,
+                "Authorization": `Basic ${Buffer.from(`${context.instance_id}:${context.instance_secret}`).toString('base64')}`,
                 "Content-Type": options?.json ? "application/json" : (options?.headers || {})["Content-Type"]
             },
             body: options?.json ? JSON.stringify(options?.json) : options?.body,
