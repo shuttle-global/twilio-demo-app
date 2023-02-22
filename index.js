@@ -492,7 +492,7 @@ function mount (app) {
         } else if (req.body.PaymentToken) {
             twiml.redirect(app_path(req.c, `/payment_method/${req.body.PaymentToken}`));            
         } else {
-            twiml.say(`Sorry, there was an error, ${req.body.PaymentError}`);             
+            twiml.say(`Sorry, this payment was declined, ${req.body.PayConnector_gateway_message || req.body.PaymentError}`);             
             twiml.redirect(app_path(req.c, `/main_menu`));
         }
 
