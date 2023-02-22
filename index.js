@@ -5,6 +5,7 @@ const VoiceResponse = require('twilio').twiml.VoiceResponse;
 
 const config = {
     API_URL: process.env.SHUTTLE_API_URL || 'https://app.shuttleglobal.com',
+    DEMO_APP_HOST: process.env.DEMO_APP_HOST || 'https://app.shuttleglobal.com',
     SANDBOX_SHARED_KEY: process.env.TWILIO_SHARED_KEY_SANDBOX,
     LIVE_SHARED_KEY: process.env.TWILIO_SHARED_KEY_LIVE,
     TWILIO_SID: process.env.TWILIO_SID,
@@ -22,6 +23,7 @@ function app_path (context, path) {
 
 const shuttle_api = {
     host: config.API_URL,
+    demo_app_host: config.DEMO_APP_HOST,
 
     // Wrap fetch with logging
     _logged_fetch: (context, url, options) => {
@@ -163,8 +165,8 @@ function mount (app) {
                 <link rel="icon" href="/favicon.png">
               </head>
               <body>
-                <div data-shuttle-checkout="${req.params.link}" data-shuttle-disable-new-window="true" data-shuttle-host="https://app.shuttleglobal.com"></div>
-                <script src="https://app.shuttleglobal.com/${twilio_public_key(req.params.instance_id)}/${req.params.instance_id}/shuttle-1.3.X.js" type="text/javascript"></script>
+                <div data-shuttle-checkout="${req.params.link}" data-shuttle-disable-new-window="true" data-shuttle-host="${shuttle_api.host}"></div>
+                <script src="${shuttle_api.host}/${twilio_public_key(req.params.instance_id)}/${req.params.instance_id}/shuttle-1.3.X.js" type="text/javascript"></script>
               </body>
             </html>`);
     })
@@ -455,10 +457,14 @@ function mount (app) {
             postalCode: req.body.FromCountry === "US",
             paymentMethod: req.query.type == "ACH" ? 'ach-debit' : undefined,
             bankAccountType: req.query.account_type,
-            action: `${shuttle_api.host}${app_path(req.c, `/payment_response`)}`,
+            action: `${app_path(req.c, `/payment_response`)}`,
             description: `Demo App - ${req.query.type} ${req.query.action || "payment"}`
         });
 
+        if (req.query.type == "ACH") {
+            pay.parameter({name: "AVSName", value: "John Smith"}); // From your CRM
+        }
+ 
         if (req.body.Caller) {
             pay.parameter({name: "account_crm_key", value: req.c.account_crm_key});
             pay.parameter({name: "account_phone", value: req.c.account_phone});                
@@ -472,7 +478,7 @@ function mount (app) {
         }
     
         let prompt = pay.prompt({for: "payment-processing"});
-        prompt.say("Please wait while we process your payment, this may take a few seconds.")
+        prompt.say(`Please wait while we ${req.query.action != "TOKENISE" ? "process your payment" : "validate your details"}, this may take a few seconds.`)
 
 		res.type('text/xml');
 		res.send(twiml.toString());        

@@ -2,6 +2,7 @@ const express = require('express');
 const demo_app = require('./index.js');
 const app = express();
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 let requestCount = 0;
 
