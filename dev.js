@@ -1,5 +1,6 @@
+import {mount} from './index.js';
 const express = require('express');
-const demo_app = require('./index.js');
+
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -46,7 +47,7 @@ app.use((req, res, next) => {
     next();
 });
 
-demo_app.mount(app);
+mount(app);
 
 app.use((error, req, res, next) => {
 	if (res.headersSent) {

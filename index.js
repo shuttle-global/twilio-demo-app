@@ -1,7 +1,9 @@
-const express = require('express');
-const node_fetch = require('node-fetch');
-const FormData = require('form-data');
-const VoiceResponse = require('twilio').twiml.VoiceResponse;
+import express from 'express';
+import node_fetch from 'node-fetch';
+import FormData from 'form-data';
+import twilio from 'twilio';
+
+const VoiceResponse = twilio.twiml.VoiceResponse;
 
 const config = {
     API_URL: process.env.SHUTTLE_API_URL || 'https://app.shuttleglobal.com',
@@ -145,7 +147,7 @@ const shuttle_api = {
     }
 }
 
-function mount (app) {
+export function mount (app) {
     // A little wrapper function to ensure errors get cause by express catch-all error handler
     function handle_async_errors (fn) {
         return (req, res, next) => {
@@ -722,4 +724,6 @@ function mount (app) {
     });
 }
 
-exports.mount = mount;
+export default {
+    mount
+}
