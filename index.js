@@ -149,10 +149,8 @@ const shuttle_api = {
 
 export function mount (app) {
     // A little wrapper function to ensure errors get cause by express catch-all error handler
-    function handle_async_errors (fn) {
-        return (req, res, next) => {
-            return fn(req, res, next).catch((e) => next(e));
-        }
+    const handle_async_errors = fn => (req, res, next) => {
+        Promise.resolve(fn(req, res, next)).catch(next);
     };
 
     app.get('/demo/link/:instance_id/:link', (req, res) => {
