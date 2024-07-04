@@ -232,7 +232,7 @@ export function mount (app) {
 
     async function build_main_menu(context, choices_so_far = []) {
         const capabilities = await shuttle_api.get_capabilities(req.c);
-        const payment_methods = (await req.c.account_crm_key ? shuttle_api.get_payment_methods(req.c, req.c.account_crm_key) : undefined) || [];
+        const payment_methods = (await context.account_crm_key ? shuttle_api.get_payment_methods(context, context.account_crm_key) : undefined) || [];
 
         let menu = [
             {
