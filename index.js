@@ -172,29 +172,23 @@ export function mount (app) {
     })
 
     app.use('/demo/:connector/:instance_id/:instance_secret', (req, res, next) => {
-        req.c = req.c;
         req.c.connector = req.params.connector;
         req.c.instance_id = req.params.instance_id;
         req.c.instance_secret = req.params.instance_secret;
-        req.c.instance_promise = shuttle_api.get_instance(req.c);
-        req.c.capabilities_promise = shuttle_api.get_capabilities(req.c);
         req.c.account_phone = req.body.Caller?.replace(/\+/, "");
         req.c.account_crm_key = req.c.account_phone ? "DEMO_" + req.c.account_phone : undefined; // Use your customer ID
-        req.c.payment_methods_promise = req.c.account_crm_key ? shuttle_api.get_payment_methods(req.c, req.c.account_crm_key) : undefined;
 
         next();
     })
 
     app.use('/demo/:connector/:instance_id/:instance_secret/payment/:payment_id', (req, res, next) => {
         req.c.payment_id = req.params.payment_id;
-        req.c.payment_promise = shuttle_api.get_payment(req.c, req.c.payment_id);
-
+        
         next();
     })    
 
     app.use('/demo/:connector/:instance_id/:instance_secret/payment_method/:payment_method_id', (req, res, next) => {
         req.c.payment_method_id = req.params.payment_method_id;
-        req.c.payment_method_promise = shuttle_api.get_payment_method(req.c, req.c.payment_method_id);
 
         next();
     })    
@@ -209,8 +203,7 @@ export function mount (app) {
             return;
         }
 
-        const instance = await req.c.instance_promise;
-        const capabilities = await req.c.capabilities_promise;
+        const [instance, capabilities] = await Promise.all([shuttle_api.get_instance(req.c), shuttle_api.get_capabilities(req.c)]);
         const twiml = new VoiceResponse();
 
         if (instance && capabilities?.payments_ready) {
@@ -238,8 +231,8 @@ export function mount (app) {
     }));
 
     async function build_main_menu(context, choices_so_far = []) {
-        const capabilities = await context.capabilities_promise;
-        const payment_methods = await context.payment_methods_promise || [];
+        const capabilities = await shuttle_api.get_capabilities(req.c);
+        const payment_methods = (await req.c.account_crm_key ? shuttle_api.get_payment_methods(req.c, req.c.account_crm_key) : undefined) || [];
 
         let menu = [
             {
@@ -501,7 +494,7 @@ export function mount (app) {
     }));
 
     app.post('/demo/:connector/:instance_id/:instance_secret/repeat_payment', handle_async_errors(async (req, res) => {
-        const payment_methods = await req.c.payment_methods_promise;
+        const payment_methods = req.c.account_crm_key ? (await shuttle_api.get_payment_methods(req.c, req.c.account_crm_key)) : undefined;
         const twiml = new VoiceResponse();
 
         const payment_method = payment_methods.filter((pm) => pm.id == req.query.payment_method)[0];
@@ -590,7 +583,7 @@ export function mount (app) {
     })); 
 
     app.post('/demo/:connector/:instance_id/:instance_secret/payment/:id', handle_async_errors(async (req, res) => {
-        const payment = await req.c.payment_promise;
+        const payment = await shuttle_api.get_payment(req.c, req.c.payment_id);
         const twiml = new VoiceResponse();
 
         if (payment.status =='SUCCESS' || payment.status =='UNATTRIBUTED') {
@@ -612,8 +605,7 @@ export function mount (app) {
     }));    
 
     app.post('/demo/:connector/:instance_id/:instance_secret/payment/:id/payment_menu', handle_async_errors(async (req, res) => {
-        const capabilities = await req.c.capabilities_promise;
-        const payment = await req.c.payment_promise;
+        const [capabilities, payment] = await Promise.all([shuttle_api.get_capabilities(req.c), shuttle_api.get_payment(req.c, req.c.payment_id)]);
         const twiml = new VoiceResponse();
 
         const gather = twiml.gather({numDigits: 1, action: app_path(req.c, `/payment/${payment.id}/payment_menu_response`)})
@@ -637,7 +629,7 @@ export function mount (app) {
 
     app.post('/demo/:connector/:instance_id/:instance_secret/payment/:id/payment_menu_response', handle_async_errors(async (req, res) => {
         const selection = req.body.Digits;
-        const payment = await req.c.payment_promise;
+        const payment = await shuttle_api.get_payment(req.c, req.c.payment_id);
         const twiml = new VoiceResponse();
 
         if (selection == 1) {
@@ -693,7 +685,7 @@ export function mount (app) {
 
     app.post('/demo/:connector/:instance_id/:instance_secret/payment_method/:payment_method_id', handle_async_errors(async (req, res) => {
         const twiml = new VoiceResponse();
-        const payment_method = await req.c.payment_method_promise;
+        const payment_method = await shuttle_api.get_payment_method(req.c, req.c.payment_method_id);
                 
         twiml.say(`You have saved your ${payment_method.name}`);
         twiml.say("Returning to main menu");
@@ -705,7 +697,7 @@ export function mount (app) {
 
     app.post('/demo/:connector/:instance_id/:instance_secret/payment_method/:payment_method_id/delete', handle_async_errors(async (req, res) => {
         const twiml = new VoiceResponse();
-        const payment_method = await req.c.payment_method_promise;
+        const payment_method = await shuttle_api.get_payment_method(req.c, req.c.payment_method_id);
         
         const response = await shuttle_api.delete_payment_method(req.c, req.params.payment_method_id);
         
