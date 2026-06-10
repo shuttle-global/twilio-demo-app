@@ -1,5 +1,5 @@
+import express from 'express';
 import {mount} from './index.js';
-const express = require('express');
 
 const app = express();
 app.use(express.json());
@@ -25,13 +25,13 @@ app.use((req, res, next) => {
         "body": (req.method == "POST" || req.method == "PUT") ? req.rawBody || req.body : undefined,
     });
 
-    res.on('finish', (data) => {
+    res.on('finish', () => {
         if (res.statusCode != 500) {
-            const logSeverity = (res.statusCode >= 200 && res.statusCode <= 399 ? "debug" : "warn")
+            const ok = res.statusCode >= 200 && res.statusCode <= 399;
 
-            req.c.log(req.c, "debug", {
+            req.c.log(req.c, ok ? "debug" : "warn", {
                 "type": "request",
-                "action": "complete" || (res.statusCode >= 200 && res.statusCode <= 399 ? "" : "_error"),
+                "action": ok ? "complete" : "complete_error",
                 "status": res.statusCode,
                 "method": req.method,
                 "host": req.headers['Host'],
@@ -50,16 +50,16 @@ app.use((req, res, next) => {
 mount(app);
 
 app.use((error, req, res, next) => {
-	if (res.headersSent) {
-		next(error);
-		return;
-	}
+    if (res.headersSent) {
+        next(error);
+        return;
+    }
 
-	if (error.status == 401) {
-	    res.status(401).send({error: "Unauthorized"});
-	} else {
-	    res.status(500).send({error: error.message || error.body || error});
-	}
+    if (error.status == 401) {
+        res.status(401).send({error: "Unauthorized"});
+    } else {
+        res.status(500).send({error: error.message || error.body || error});
+    }
 
     req.c.log(req.c, "error", {
         "type": "request",

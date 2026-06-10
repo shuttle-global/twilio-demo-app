@@ -1,6 +1,6 @@
 {
   "name": "@shuttleglobal/twilio-demo-app",
-  "version": "1.0.21",
+  "version": "1.0.22",
   "type": "module",
   "description": "Shuttle - Twilio Demo App",
   "repository": "https://github.com/shuttle-global/twilio-demo-app",
@@ -13,10 +13,8 @@
     "express": "^4.18.2",
     "form-data": "^4.0.0",
     "node-fetch": "^3.3.1",
-    "twilio": "^4.14.0",
-    "uuid": "^9.0.0"
+    "twilio": "^4.14.0"
   },
-  "devDependencies": {},
   "engines": {
     "node": "14.* || >= 16"
   }

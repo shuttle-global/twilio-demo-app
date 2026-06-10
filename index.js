@@ -1,9 +1,29 @@
+// Twilio Pay + Shuttle demo
+// ---------------------------------------------------------------------------
+// A small Express app that drives a Twilio phone-payments (IVR) flow:
+//   caller dials in -> /start reads a menu -> caller chooses an action ->
+//   we collect card/ACH details with <Pay> (or send a payment link by SMS) ->
+//   the result is read back and a follow-up menu offers refund/capture/void.
+//
+// It talks to the Shuttle API (`shuttle_api` below) to create and manage
+// payments, and returns TwiML for Twilio to speak/gather on each request.
+//
+// This is reference code meant to be read and copied, so the happy path is
+// kept front-and-centre rather than guarding every edge case.
 import express from 'express';
 import node_fetch from 'node-fetch';
 import FormData from 'form-data';
 import twilio from 'twilio';
 
 const VoiceResponse = twilio.twiml.VoiceResponse;
+
+// Escape values that get interpolated into the HTML payment-link page so a
+// crafted URL can't inject markup. (The IVR routes return TwiML, not HTML.)
+function escape_html(value) {
+    return String(value).replace(/[&<>"']/g, (c) => (
+        {"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]
+    ));
+}
 
 const config = {
     API_URL: process.env.SHUTTLE_API_URL || 'https://app.shuttleglobal.com',
@@ -20,7 +40,7 @@ function twilio_public_key(instance) {
 }
 
 function app_path (context, path) {
-    return `/demo/${context.connector}/${context.instance_id}/${context.instance_secret}${path}`   
+    return `/demo/${context.connector}/${context.instance_id}/${context.instance_secret}${path}`
 }
 
 const shuttle_api = {
@@ -30,15 +50,18 @@ const shuttle_api = {
     // Wrap fetch with logging
     _logged_fetch: (context, url, options) => {
         var start = new Date().getTime();
-        context.log(context, "debug", {"type": "fetch", "action": "start", url, options});
-        
+
+        // Don't log the Authorization header - it carries the instance secret.
+        const safe_options = {...options, headers: {...options.headers, Authorization: undefined}};
+        context.log(context, "debug", {"type": "fetch", "action": "start", url, options: safe_options});
+
         return node_fetch(url, options)
             .then(async (response) => {
                 var ok = response.status >= 200 && response.status < 400
                 var json = options.method != "DELETE" ? await response.json() : undefined;
-                
+
                 context.log(context, ok ? "debug" : "error", {"type": "fetch", "action": ok ? "complete" : "complete_error", url, status: response.status, body: json, duration: new Date().getTime() - start});
-                
+
                 if (ok) {
                     return json;
                 } else {
@@ -70,9 +93,9 @@ const shuttle_api = {
     },
 
     get_payment_methods: (context, crm_key) => {
-        return crm_key ? shuttle_api.fetch(context, `/c/api/instances/${context.instance_id}/accounts/${crm_key}/payment_methods?criteria=${escape(`status=ACTIVE;FAILING`)}`)
+        return crm_key ? shuttle_api.fetch(context, `/c/api/instances/${context.instance_id}/accounts/${crm_key}/payment_methods?criteria=${encodeURIComponent(`status=ACTIVE;FAILING`)}`)
             .then((response) => response?.payment_methods) : undefined;
-    },  
+    },
 
     get_payment_method: (context, payment_method_id) => {
         return shuttle_api.fetch(context, `/c/api/instances/${context.instance_id}/payment_methods/${payment_method_id}`)
@@ -83,21 +106,21 @@ const shuttle_api = {
     get_payment: (context, payment_id) => {
         return shuttle_api.fetch(context, `/c/api/instances/${context.instance_id}/payments/${payment_id}`)
             .then((response) => response?.payment);
-    },  
+    },
 
     create_payment: (context, body) => {
         return shuttle_api.fetch(context, `/c/api/instances/${context.instance_id}/payments`, {
             method: "POST",
             json: body
         });
-    },  
+    },
 
     create_checkout: (context, body) => {
         return shuttle_api.fetch(context, `/c/api/instances/${context.instance_id}/checkout`, {
             method: "POST",
             json: body
         });
-    },  
+    },
 
     refund_payment: (context, payment_id, amount, reason) => {
         return shuttle_api.fetch(context, `/c/api/instances/${context.instance_id}/payments/${payment_id}/refund`, {
@@ -107,7 +130,7 @@ const shuttle_api = {
                 reason: reason || "Test App"
             }
         }).then((response) => response?.refund);
-    },   
+    },
 
     capture_payment: (context, payment_id, amount) => {
         return shuttle_api.fetch(context, `/c/api/instances/${context.instance_id}/payments/${payment_id}/capture`, {
@@ -116,7 +139,7 @@ const shuttle_api = {
                 amount: amount
             }
         }).then((response) => response?.capture);
-    },   
+    },
 
     void_payment: (context, payment_id) => {
         return shuttle_api.fetch(context, `/c/api/instances/${context.instance_id}/payments/${payment_id}/void`, {
@@ -153,7 +176,11 @@ export function mount (app) {
         Promise.resolve(fn(req, res, next)).catch(next);
     };
 
+    // Public HTML page that renders the hosted checkout for a payment link.
     app.get('/demo/link/:instance_id/:link', (req, res) => {
+        const instance_id = escape_html(req.params.instance_id);
+        const link = escape_html(req.params.link);
+
         res.status(200).send(
             `<!DOCTYPE html>
             <html class="h-full">
@@ -165,8 +192,8 @@ export function mount (app) {
                 <link rel="icon" href="/favicon.png">
               </head>
               <body>
-                <div data-shuttle-checkout="${req.params.link}" data-shuttle-disable-new-window="true" data-shuttle-host="${shuttle_api.host}"></div>
-                <script src="${shuttle_api.host}/${twilio_public_key(req.params.instance_id)}/${req.params.instance_id}/shuttle-1.3.X.js" type="text/javascript"></script>
+                <div data-shuttle-checkout="${link}" data-shuttle-disable-new-window="true" data-shuttle-host="${shuttle_api.host}"></div>
+                <script src="${shuttle_api.host}/${twilio_public_key(req.params.instance_id)}/${instance_id}/shuttle-1.3.X.js" type="text/javascript"></script>
               </body>
             </html>`);
     })
@@ -183,15 +210,15 @@ export function mount (app) {
 
     app.use('/demo/:connector/:instance_id/:instance_secret/payment/:payment_id', (req, res, next) => {
         req.c.payment_id = req.params.payment_id;
-        
+
         next();
-    })    
+    })
 
     app.use('/demo/:connector/:instance_id/:instance_secret/payment_method/:payment_method_id', (req, res, next) => {
         req.c.payment_method_id = req.params.payment_method_id;
 
         next();
-    })    
+    })
 
     app.all('/demo/:connector/:instance_id/:instance_secret/start', handle_async_errors(async (req, res, next) => {
         if (req.method == "GET") {
@@ -199,7 +226,7 @@ export function mount (app) {
             const twiml = new VoiceResponse();
             twiml.redirect(app_path(req.c, `/start`));
             res.type('text/xml');
-            res.send(twiml.toString());  
+            res.send(twiml.toString());
             return;
         }
 
@@ -209,7 +236,7 @@ export function mount (app) {
         if (instance && capabilities?.payments_ready) {
             const gather = twiml.gather({numDigits: 1, action: app_path(req.c, `/main_menu`)});
             gather.say(`Welcome to the Shuttle phone payments demo for ${instance.name}.`);
-            
+
             if (instance.environment == "SANDBOX") {
                 gather.say(`This is a TEST environment and requires the use of TEST card numbers.`);
             } else {
@@ -227,7 +254,7 @@ export function mount (app) {
         }
 
         res.type('text/xml');
-        res.send(twiml.toString());  
+        res.send(twiml.toString());
     }));
 
     async function build_main_menu(context, choices_so_far = []) {
@@ -389,7 +416,7 @@ export function mount (app) {
     }
 
     app.post('/demo/:connector/:instance_id/:instance_secret/main_menu', handle_async_errors(async (req, res) => {
-    	const twiml = new VoiceResponse();
+        const twiml = new VoiceResponse();
 
         var choices_so_far = req.query.choice ? req.query.choice.split(",") : [];
         var menu;
@@ -400,11 +427,11 @@ export function mount (app) {
                 throw "Invalid URL";
             }
         } catch(err) {
-            twiml.say("Sorry, something went wrong."); 
-            menu = await build_main_menu(req.c);   
-            choices_so_far = [];      
+            twiml.say("Sorry, something went wrong.");
+            menu = await build_main_menu(req.c);
+            choices_so_far = [];
         }
-        
+
         const selection = req.body.Digits;
 
         if (selection == 0) {
@@ -419,48 +446,53 @@ export function mount (app) {
                         menu = menu[selection -1].sub_menu;
                         choices_so_far.push(selection -1);
                     } else {
-                        twiml.say("Sorry, invalid menu config, every node must have a sub_menu or redirect");                
+                        twiml.say("Sorry, invalid menu config, every node must have a sub_menu or redirect");
                     }
                 } else {
-                    twiml.say("Sorry, invalid selection");                
-                } 
+                    twiml.say("Sorry, invalid selection");
+                }
             }
 
             const gather = twiml.gather({numDigits: 1, action: app_path(req.c, `/main_menu?choice=${choices_so_far?.join(",") || ""}`)});
             gather.say("Press");
             menu.map((item, index) => gather.say(`${index + 1} ${item.name}`));
         }
-              
-		res.type('text/xml');
-		res.send(twiml.toString());  
+
+        res.type('text/xml');
+        res.send(twiml.toString());
     }));
 
     app.post('/demo/:connector/:instance_id/:instance_secret/new_payment', handle_async_errors(async (req, res) => {
-    	const twiml = new VoiceResponse();
+        const twiml = new VoiceResponse();
 
         if (req.query.action == "TOKENISE") {
             twiml.say(`You are going to save a payment method for reuse`);
         } else {
-            twiml.say(`You are going to ${req.query.action == "AUTH" ? "authorize" : "pay"} 1 USD ${req.query.save == "Y" ? "and save the payment method for reuse" : ""} `);            
+            twiml.say(`You are going to ${req.query.action == "AUTH" ? "authorize" : "pay"} 1 USD ${req.query.save == "Y" ? "and save the payment method for reuse" : ""} `);
         }
 
+        // <Pay> is the core of Twilio Pay: Twilio collects the card or bank
+        // details over the phone (so they never touch this app) and posts the
+        // result to `action`. `paymentConnector` selects the Shuttle gateway.
         const pay = twiml.pay({
             paymentConnector: req.c.connector,
-            chargeAmount: req.query.action != "TOKENISE" ? 1 : undefined,
+            chargeAmount: req.query.action != "TOKENISE" ? 1 : undefined,   // omit to tokenise only
             postalCode: req.body.FromCountry === "US",
             paymentMethod: req.query.type == "ACH" ? 'ach-debit' : undefined,
             bankAccountType: req.query.account_type,
-            action: `${app_path(req.c, `/payment_response`)}`,
+            action: `${app_path(req.c, `/payment_response`)}`,              // Twilio posts the outcome here
             description: `Demo App - ${req.query.type} ${req.query.action || "payment"}`
         });
+
+        // <Pay> parameters are passed straight through to the gateway/CRM.
 
         if (req.query.type == "ACH") {
             pay.parameter({name: "AVSName", value: "John Smith"}); // From your CRM
         }
- 
+
         if (req.body.Caller) {
             pay.parameter({name: "account_crm_key", value: req.c.account_crm_key});
-            pay.parameter({name: "account_phone", value: req.c.account_phone});                
+            pay.parameter({name: "account_phone", value: req.c.account_phone});
         }
 
         if (req.query.action == "AUTH") {
@@ -469,28 +501,28 @@ export function mount (app) {
         if (req.query.save == "Y") {
             pay.parameter({name: "save_card", value: true});
         }
-    
+
         let prompt = pay.prompt({for: "payment-processing"});
         prompt.say(`Please wait while we ${req.query.action != "TOKENISE" ? "process your payment" : "validate your details"}, this may take a few seconds.`)
 
-		res.type('text/xml');
-		res.send(twiml.toString());        
+        res.type('text/xml');
+        res.send(twiml.toString());
     }));
 
     app.post('/demo/:connector/:instance_id/:instance_secret/payment_response', handle_async_errors(async (req, res) => {
-    	const twiml = new VoiceResponse();
+        const twiml = new VoiceResponse();
 
         if (req.body.PaymentConfirmationCode) {
-            twiml.redirect(app_path(req.c, `/payment/${req.body.PaymentConfirmationCode}`));            
+            twiml.redirect(app_path(req.c, `/payment/${req.body.PaymentConfirmationCode}`));
         } else if (req.body.PaymentToken) {
-            twiml.redirect(app_path(req.c, `/payment_method/${req.body.PaymentToken}`));            
+            twiml.redirect(app_path(req.c, `/payment_method/${req.body.PaymentToken}`));
         } else {
-            twiml.say(`Sorry, this payment was declined, ${req.body.PayConnector_gateway_message || req.body.PaymentError}`);             
+            twiml.say(`Sorry, this payment was declined, ${req.body.PayConnector_gateway_message || req.body.PaymentError}`);
             twiml.redirect(app_path(req.c, `/main_menu`));
         }
 
-		res.type('text/xml');
-		res.send(twiml.toString());  
+        res.type('text/xml');
+        res.send(twiml.toString());
     }));
 
     app.post('/demo/:connector/:instance_id/:instance_secret/repeat_payment', handle_async_errors(async (req, res) => {
@@ -498,7 +530,7 @@ export function mount (app) {
         const twiml = new VoiceResponse();
 
         const payment_method = payment_methods.filter((pm) => pm.id == req.query.payment_method)[0];
-        
+
         if (payment_method) {
             twiml.say(`You are going to ${req.query.action == "AUTH" ? "authorize" : "pay"} 1 USD using your ${payment_method.name}`);
 
@@ -514,20 +546,20 @@ export function mount (app) {
                 }
             });
 
-            twiml.redirect(app_path(req.c, `/payment/${response.payment.id}`));            
+            twiml.redirect(app_path(req.c, `/payment/${response.payment.id}`));
         } else {
             twiml.say(`Invalid selection, returning to main menu`);
             twiml.redirect(app_path(req.c, `/main_menu`));
         }
 
         res.type('text/xml');
-        res.send(twiml.toString());        
-    }));    
+        res.send(twiml.toString());
+    }));
 
     app.post('/demo/:connector/:instance_id/:instance_secret/payment_link', handle_async_errors(async (req, res) => {
         const twiml = new VoiceResponse();
 
-        var link_id = `link-${new Date().getTime()}`; // basket 
+        var link_id = `link-${new Date().getTime()}`; // basket
 
         var response = await shuttle_api.create_checkout(req.c, {
             options: {
@@ -545,13 +577,13 @@ export function mount (app) {
         });
 
         await shuttle_api.send_sms(req.c, config.TWILIO_SMS_FROM || req.body.Called, req.body.Caller, `Please complete your payment here: ${shuttle_api.demo_app_host}/demo/link/${req.c.instance_id}/${response.nonce}`);
-        
+
         twiml.say(`We've sent you a link to ${req.query.action == "AUTH" ? "authorize" : "pay"} 1 USD, please follow the link to complete payment.`);
         twiml.redirect(app_path(req.c, `/payment_link/${link_id}/wait`));
 
         res.type('text/xml');
-        res.send(twiml.toString());        
-    }));        
+        res.send(twiml.toString());
+    }));
 
     app.post('/demo/:connector/:instance_id/:instance_secret/payment_link/:link/wait', handle_async_errors(async (req, res) => {
         const twiml = new VoiceResponse();
@@ -579,37 +611,37 @@ export function mount (app) {
             twiml.redirect(app_path(req.c, `/payment_link/${req.params.link}/wait`));
         }
         res.type('text/xml');
-        res.send(twiml.toString());        
-    })); 
+        res.send(twiml.toString());
+    }));
 
     app.post('/demo/:connector/:instance_id/:instance_secret/payment/:id', handle_async_errors(async (req, res) => {
         const payment = await shuttle_api.get_payment(req.c, req.c.payment_id);
         const twiml = new VoiceResponse();
 
         if (payment.status =='SUCCESS' || payment.status =='UNATTRIBUTED') {
-            twiml.say(`Your payment was Approved! Your reference is ${payment.reference}.`); 
-            twiml.redirect(app_path(req.c, `/payment/${payment.id}/payment_menu`));            
+            twiml.say(`Your payment was Approved! Your reference is ${payment.reference}.`);
+            twiml.redirect(app_path(req.c, `/payment/${payment.id}/payment_menu`));
         } else if (payment.status =='PENDING' || payment.status =='UNRESOLVED') {
-            twiml.say(`Your payment is still processing, you should not dispatch any goods until the payment completes.`); 
-            twiml.redirect(app_path(req.c, `/main_menu`));            
+            twiml.say(`Your payment is still processing, you should not dispatch any goods until the payment completes.`);
+            twiml.redirect(app_path(req.c, `/main_menu`));
         } else if (payment.status =='DECLINED') {
-            twiml.say(`Payment failed, with decline type ${payment.gateway_status}, reason: ${payment.gateway_reference}`); 
-            twiml.redirect(app_path(req.c, `/main_menu`));            
+            twiml.say(`Payment failed, with decline type ${payment.gateway_status}, reason: ${payment.gateway_reference}`);
+            twiml.redirect(app_path(req.c, `/main_menu`));
         } else {
-            twiml.say(`Sorry there was an error:  ${req.body.PaymentError}`);             
-            twiml.redirect(app_path(req.c, `/main_menu`));            
+            twiml.say(`Sorry there was an error:  ${req.body.PaymentError}`);
+            twiml.redirect(app_path(req.c, `/main_menu`));
         };
 
         res.type('text/xml');
-        res.send(twiml.toString());  
-    }));    
+        res.send(twiml.toString());
+    }));
 
     app.post('/demo/:connector/:instance_id/:instance_secret/payment/:id/payment_menu', handle_async_errors(async (req, res) => {
         const [capabilities, payment] = await Promise.all([shuttle_api.get_capabilities(req.c), shuttle_api.get_payment(req.c, req.c.payment_id)]);
         const twiml = new VoiceResponse();
 
         const gather = twiml.gather({numDigits: 1, action: app_path(req.c, `/payment/${payment.id}/payment_menu_response`)})
-        
+
         gather.say("Payment Menu. Press  ");
 
         if (payment.balance > 0) { // check capabilities
@@ -624,8 +656,8 @@ export function mount (app) {
         gather.say("0 to return to the main menu");
 
         res.type('text/xml');
-        res.send(twiml.toString());  
-    }));    
+        res.send(twiml.toString());
+    }));
 
     app.post('/demo/:connector/:instance_id/:instance_secret/payment/:id/payment_menu_response', handle_async_errors(async (req, res) => {
         const selection = req.body.Digits;
@@ -638,76 +670,76 @@ export function mount (app) {
             if (refund.status == 'SUCCESS') {
                 twiml.say(`Payment refunded, reference ${refund.reference}.`);
                 twiml.say("Returning to main menu.");
-                twiml.redirect(app_path(req.c, `/main_menu`));            
+                twiml.redirect(app_path(req.c, `/main_menu`));
             } else if (refund.status == 'PENDING' || refund.status == 'UNRESOLVED') {
                 twiml.say(`Refund in progress, reference ${refund.reference}.`);
                 twiml.say("Returning to main menu.");
-                twiml.redirect(app_path(req.c, `/main_menu`));            
+                twiml.redirect(app_path(req.c, `/main_menu`));
             } else {
                 twiml.say(`Refund failed, reference ${refund.reference}`);
-                twiml.redirect(app_path(req.c, `/payment/${req.params.id}/payment_menu`));            
+                twiml.redirect(app_path(req.c, `/payment/${req.params.id}/payment_menu`));
             }
         } else if (selection == 2) {
             // Capture
             var capture = await shuttle_api.capture_payment(req.c, req.c.payment_id)
             if (capture.status == 'SUCCESS') {
                 twiml.say(`Payment captures, reference ${capture.reference}.`);
-                twiml.redirect(app_path(req.c, `/payment/${capture.id}/payment_menu`));            
+                twiml.redirect(app_path(req.c, `/payment/${capture.id}/payment_menu`));
             } else if (capture.status == 'PENDING' || capture.status == 'UNRESOLVED') {
                 twiml.say(`Capture in progress, reference ${capture.reference}.`);
                 twiml.say("Returning to main menu.");
-                twiml.redirect(app_path(req.c, `/main_menu`));            
+                twiml.redirect(app_path(req.c, `/main_menu`));
             } else {
                 twiml.say(`Capture failed, reference ${capture.reference}`);
-                twiml.redirect(app_path(req.c, `/payment/${req.params.id}/payment_menu`));            
+                twiml.redirect(app_path(req.c, `/payment/${req.params.id}/payment_menu`));
             }
         } else if (selection == 3) {
             // Void
             var response = await shuttle_api.void_payment(req.c, req.c.payment_id)
             if (response.status == 'SUCCESS') {
                 twiml.say(`Payment voided, reference ${response.reference}.`);
-                twiml.redirect(app_path(req.c, `/main_menu`));            
+                twiml.redirect(app_path(req.c, `/main_menu`));
             } else if (response.status == 'PENDING' || response.status == 'UNRESOLVED') {
                 twiml.say(`Void in progress, reference ${response.reference}.`);
                 twiml.say("Returning to main menu.");
-                twiml.redirect(app_path(req.c, `/main_menu`));            
+                twiml.redirect(app_path(req.c, `/main_menu`));
             } else {
                 twiml.say(`Void failed, reference ${response.reference}`);
-                twiml.redirect(app_path(req.c, `/payment/${req.params.id}/payment_menu`));            
+                twiml.redirect(app_path(req.c, `/payment/${req.params.id}/payment_menu`));
             }
         } else if (selection == 0) {
-            twiml.redirect(app_path(req.c, `/main_menu`));            
+            twiml.redirect(app_path(req.c, `/main_menu`));
         }
 
         res.type('text/xml');
-        res.send(twiml.toString());      
+        res.send(twiml.toString());
     }));
 
     app.post('/demo/:connector/:instance_id/:instance_secret/payment_method/:payment_method_id', handle_async_errors(async (req, res) => {
         const twiml = new VoiceResponse();
         const payment_method = await shuttle_api.get_payment_method(req.c, req.c.payment_method_id);
-                
+
         twiml.say(`You have saved your ${payment_method.name}`);
         twiml.say("Returning to main menu");
         twiml.redirect(app_path(req.c, `/main_menu`));
 
         res.type('text/xml');
-        res.send(twiml.toString());        
-    }));       
+        res.send(twiml.toString());
+    }));
 
     app.post('/demo/:connector/:instance_id/:instance_secret/payment_method/:payment_method_id/delete', handle_async_errors(async (req, res) => {
         const twiml = new VoiceResponse();
         const payment_method = await shuttle_api.get_payment_method(req.c, req.c.payment_method_id);
-        
+
         const response = await shuttle_api.delete_payment_method(req.c, req.params.payment_method_id);
-        
+
         twiml.say(`Deleted ${payment_method.name}`);
         twiml.say("Returning to main menu");
         twiml.redirect(app_path(req.c, `/main_menu`));
 
         res.type('text/xml');
-        res.send(twiml.toString());        
-    }));       
+        res.send(twiml.toString());
+    }));
 
     app.all('/demo/:connector/:instance_id/:instance_secret/*', (req, res) => {
         res.status(404).send();
