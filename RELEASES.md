@@ -3,12 +3,11 @@
 Published to npm as [`@shuttleglobal/twilio-demo-app`](https://www.npmjs.com/package/@shuttleglobal/twilio-demo-app).
 
 This repository is mirrored: `origin` is GitHub (the public home), `bitbucket` is the publish
-remote. There is no `verified` branch here - unlike the rest of the estate, nothing gates on one,
-so pushing to Bitbucket `master` is itself the release action.
+remote. Both use `main`. Pushing to Bitbucket `main` is itself the release action:
 
-    git push bitbucket main:master
+    git push bitbucket main
 
-That runs `npm publish` and pushes to the public registry, so treat it as deliberate. Bump
+That runs `npm publish` against the public registry, so treat it as deliberate. Bump
 `version` in `package.json` in the same commit as the change, otherwise the publish fails on a
 duplicate version.
 
