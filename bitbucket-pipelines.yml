@@ -1,0 +1,11 @@
+image: node:20
+
+pipelines:
+  branches:
+    master:
+      - step:
+          name: "Publish to npm"
+          script:
+            - npm config set //registry.npmjs.org/:_authToken $NPM_TOKEN_PUBLISH
+            - npm ci
+            - npm publish
