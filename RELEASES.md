@@ -2,9 +2,15 @@
 
 Published to npm as [`@shuttleglobal/twilio-demo-app`](https://www.npmjs.com/package/@shuttleglobal/twilio-demo-app).
 
-Releases go out via the Bitbucket `master` pipeline: merge `verified` into `master` and the
-pipeline runs `npm publish`. Bump `version` in `package.json` in the same commit as the change,
-otherwise the publish fails on a duplicate version.
+This repository is mirrored: `origin` is GitHub (the public home), `bitbucket` is the publish
+remote. There is no `verified` branch here - unlike the rest of the estate, nothing gates on one,
+so pushing to Bitbucket `master` is itself the release action.
+
+    git push bitbucket main:master
+
+That runs `npm publish` and pushes to the public registry, so treat it as deliberate. Bump
+`version` in `package.json` in the same commit as the change, otherwise the publish fails on a
+duplicate version.
 
 ## 1.0.23 - 2026-07-29
 
