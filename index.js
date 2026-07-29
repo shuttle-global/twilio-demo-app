@@ -17,6 +17,16 @@ import twilio from 'twilio';
 
 const VoiceResponse = twilio.twiml.VoiceResponse;
 
+// Twilio's <Pay bankAccountType> attribute drives its own IVR prompting and is
+// echoed back on the action webhook, but it is NOT forwarded to the Pay
+// Connector when Twilio creates the charge. The account type therefore has to
+// be passed explicitly as a <Parameter>, which Shuttle maps to ach_account_type.
+const ACH_ACCOUNT_TYPES = {
+    "consumer-checking": "checking",
+    "consumer-savings": "savings",
+    "commercial-checking": "businessChecking"
+};
+
 // Escape values that get interpolated into the HTML payment-link page so a
 // crafted URL can't inject markup. (The IVR routes return TwiML, not HTML.)
 function escape_html(value) {
@@ -488,6 +498,7 @@ export function mount (app) {
 
         if (req.query.type == "ACH") {
             pay.parameter({name: "AVSName", value: "John Smith"}); // From your CRM
+            pay.parameter({name: "bank_account_type", value: ACH_ACCOUNT_TYPES[req.query.account_type] || "checking"});
         }
 
         if (req.body.Caller) {
