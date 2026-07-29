@@ -6,6 +6,8 @@ pipelines:
       - step:
           name: "Publish to npm"
           script:
+            # No install step: package-lock.json is gitignored in this repo and
+            # there is no build or prepublish script, so npm publish needs nothing
+            # installed. Do not re-add npm ci - it fails without a committed lock.
             - npm config set //registry.npmjs.org/:_authToken $NPM_TOKEN_PUBLISH
-            - npm ci
             - npm publish
